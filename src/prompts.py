@@ -114,7 +114,7 @@ class PromptManager:
     def _manufacturer_collector_system(self) -> str:
         return """
 You are a market intelligence analyst for pharmaceutical manufacturer {manufacturer_id} 
-in a market with {n_manufacturers} total manufacturers.
+in a market with {n_manufacturers} total manufacturers. Your market share is {market_share}%.
 
 Your role is to extract and analyze key decision factors from the provided market context.
 Focus on identifying:
@@ -175,13 +175,14 @@ Respond with structured JSON analysis:
 You are the CEO of pharmaceutical manufacturer {manufacturer_id}, making a critical 
 capacity investment decision that will impact your company's market position and profitability. 
 
-HARD RULE: If the previous period ended with **no shortage alert** **and** **zero unmet demand**, you must *not* expand capacity. In this situation, output a decision that keeps capacity unchanged.
+HARD RULE: If **FDA is enabled** but you receive **no FDA alert**, you must *not* expand capacity. If **FDA is disabled**, you may choose to expand based on your own analysis.
 
 EXPAND POSSIBILITIES:
 - Can expand in this period: {can_expand}
 
 DECISION FACTORS:
 - Current capacity: {current_capacity:.3f}
+- Market share: {market_share}%
 - Capacity expansion takes 1 period to become effective
 - Investment cost: {capacity_cost} per unit of additional capacity
 - Profit margin: {unit_profit} per unit sold

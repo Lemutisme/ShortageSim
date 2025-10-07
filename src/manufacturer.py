@@ -28,6 +28,7 @@ class ManufacturerAgent(BaseAgent):
         prompt_context = {
             "manufacturer_id": self.manufacturer_id,
             "n_manufacturers": self.config.n_manufacturers,
+            "market_share": round((self.state.capacity / (self.config.initial_demand)) * 100, 2),
             "period": context.get('period', 0),
             "n_periods": self.config.n_periods,
             "current_capacity": self.state.capacity,
@@ -76,6 +77,7 @@ class ManufacturerAgent(BaseAgent):
         decision_context = {
             "manufacturer_id": self.manufacturer_id,
             "current_capacity": self.state.capacity,
+            "market_share": round((self.state.capacity / (self.config.initial_demand)) * 100, 2),
             "can_expand": not self.state.disrupted,
             "capacity_cost": self.config.capacity_cost,
             "unit_profit": self.config.unit_profit,
