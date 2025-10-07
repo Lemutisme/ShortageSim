@@ -90,7 +90,10 @@ class SimulationCoordinator:
                 self.logger.debug("FDA making announcement decision")
                 
                 fda_context = self.environment.create_context("fda")
-                fda_decision = await self.environment.fda.make_decision(fda_context)
+                if self.config.enable_fda:
+                    fda_decision = await self.environment.fda.make_decision(fda_context)
+                else:
+                    fda_decision  = {"decision": {"announce_shortage": False}, "reasoning": "FDA disabled"}
 
                 fda_announcement = self.environment.fda.make_announcement(fda_decision)
                 
