@@ -4,6 +4,8 @@
 
 ShortageSim is a comprehensive multi-agent simulation framework that models pharmaceutical supply chain dynamics during drug shortage events. By leveraging Large Language Models (LLMs) to power agent decision-making, the system captures realistic responses to regulatory signals and market conditions under information asymmetry.
 
+This work is accepted by The 40th Annual AAAI Conference on Artificial Intelligence.
+
 ### 🎯 Research Motivation
 
 Drug shortages regularly disrupt patient care and impose major costs on health systems worldwide. While the FDA issues alerts about potential shortages, the effectiveness of these interventions remains poorly understood due to:
