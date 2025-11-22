@@ -327,6 +327,10 @@ async def run_gt_experiments(
         export_dir += f"/model_{model_override}"
     if config_overrides.get('llm_temperature') is not None:
         export_dir += f"/temp_{config_overrides['llm_temperature']}"
+    if config_overrides.get('fda_mode') is not None:
+        export_dir += f"/fda_{config_overrides['fda_mode']}"
+    if config_overrides.get('enable_fda') == False:
+        export_dir += f"/no_fda"
     export_path = Path(export_dir)
     export_path.mkdir(exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -356,7 +360,7 @@ async def run_gt_experiments(
                 print("In ground truth experiment, n_manufacturers, n_periods, disruption_magnitude are set by the GT data and cannot be overridden.")
                 # Apply overrides
                 for key, value in config_overrides.items():
-                    if key in ["llm_temperature", "fda_mode"]:
+                    if key in ["llm_temperature", "fda_mode", "enable_fda"]:
                         default_params[key] = value
                         print("overriding", key, value)
                 if model_override:
@@ -518,14 +522,6 @@ if __name__ == "__main__":
         help="The simulation mode to run."
     )
 
-    # Keeping --model and --provider for legacy compatibility if needed, but llm_model is preferred
-    parser.add_argument("--model", type=str, help="Legacy: Specify a model name directly.")
-    parser.add_argument("--provider", type=str, help="Legacy: Specify a provider directly.")
-
-    parser.add_argument("--n_manufacturers", type=int, help="Number of manufacturers in the simulation.")
-    parser.add_argument("--n_periods", type=int, help="Number of periods in the simulation.")
-    parser.add_argument("--disruption_probability", type=float, help="Probability of disruption per manufacturer per period.")
-    
     def parse_list_of_floats(arg_value):
         """
         Splits a comma-separated string into a list of float numbers.
@@ -537,8 +533,30 @@ if __name__ == "__main__":
         except ValueError:
             # Raise an error if any item can't be converted to a float
             raise argparse.ArgumentTypeError(f"Invalid list value: '{arg_value}'. Items must be valid floating-point numbers.")
+
+    def str2bool(v):
+        """Converts a string representation of truth to True or False."""
+        if isinstance(v, bool):
+            return v
+        if v.lower() in ('yes', 'true', 't', 'y', '1'):
+            return True
+        elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+            return False
+        else:
+            # Raises an error if the input is not a recognized boolean string
+            raise argparse.ArgumentTypeError('Boolean value expected.')
+
+    # Keeping --model and --provider for legacy compatibility if needed, but llm_model is preferred
+    parser.add_argument("--model", type=str, help="Legacy: Specify a model name directly.")
+    parser.add_argument("--provider", type=str, help="Legacy: Specify a provider directly.")
+
+    parser.add_argument("--n_manufacturers", type=int, help="Number of manufacturers in the simulation.")
+    parser.add_argument("--n_periods", type=int, help="Number of periods in the simulation.")
+    parser.add_argument("--disruption_probability", type=float, help="Probability of disruption per manufacturer per period.")
+    
     parser.add_argument("--market_share", type=parse_list_of_floats, help="Comma-separated market share percentages for manufacturers (e.g., '0.5,0.3,0.2').")
     parser.add_argument("--fda_mode", type=str, choices=["reactive", "proactive"], help="FDA policy mode to use in the simulation.")
+    parser.add_argument("--enable_fda", type=str2bool, help="Enable or disable the FDA agent (default: True).")
 
     parser.add_argument("--llm_temperature", type=float, help="LLM sampling temperature for decision-making.")
 
@@ -594,7 +612,7 @@ if __name__ == "__main__":
         df = pd.read_csv(csv_path)
         print(f"Loaded {df.shape[0]} trajectories from {csv_path.name}")
         # Example of running a subset, adjust as needed
-        asyncio.run(run_gt_experiments(df.iloc[:], model_override=model_override, provider_override=provider_override, **config_overrides))
+        asyncio.run(run_gt_experiments(df, model_override=model_override, provider_override=provider_override, **config_overrides))
         
     else: # This handles the "single" mode (default)
         print(f"Running single example simulation with model: {model_override}...")
