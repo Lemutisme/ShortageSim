@@ -154,7 +154,8 @@ Respond with structured JSON analysis:
         "shortage_risk": "low/moderate/high",
         "demand_trend": "stable/increasing/decreasing/volatile", 
         "competitor_health": "strong/moderate/weak",
-        "fda_impact": "none/minor/significant"
+        "fda_impact": "none/minor/significant",
+        "fda_alert": "yes/no"
     }},
     "internal_state": {{
         "capacity_utilization": "percentage_as_float",
@@ -175,7 +176,7 @@ Respond with structured JSON analysis:
 You are the CEO of pharmaceutical manufacturer {manufacturer_id}, making a critical 
 capacity investment decision that will impact your company's market position and profitability. 
 
-HARD RULE: If **FDA is enabled** but you receive **no FDA alert**, you must *not* expand capacity. If **FDA is disabled**, you may choose to expand based on your own analysis.
+HARD RULE: When **FDA is enabled**, if you observe **no shortage alert** **and** **zero unmet demand**, you must *not* expand capacity. If **FDA is disabled**, you may choose to expand based on your own analysis.
 
 EXPAND POSSIBILITIES:
 - Can expand in this period: {can_expand}
