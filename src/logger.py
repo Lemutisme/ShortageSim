@@ -8,6 +8,7 @@ from dataclasses import dataclass, asdict
 import uuid
 
 from configs import SimulationConfig, MarketState, DisruptionEvent
+from copy import deepcopy
 
 
 @dataclass
@@ -47,6 +48,47 @@ class MarketLogEvent(LogEvent):
 
 class SimulationLogger:
     """Comprehensive logging system for the drug shortage simulation."""
+    
+    @staticmethod
+    def _sanitize_config_for_logging(config: SimulationConfig) -> str:
+        """Create a sanitized string representation of config with masked API keys."""
+        # Create a copy of config as dict
+        config_dict = asdict(config)
+        
+        # Mask sensitive fields
+        sensitive_fields = ['openai_api_key', 'anthropic_api_key', 'gemini_api_key', 'deepseek_api_key']
+        for field in sensitive_fields:
+            if field in config_dict and config_dict[field]:
+                key_value = str(config_dict[field])
+                if len(key_value) > 10:
+                    # Show first 8 and last 4 characters
+                    config_dict[field] = f"{key_value[:8]}...{key_value[-4:]}"
+                else:
+                    config_dict[field] = "***"
+        
+        # Create a compact, readable string representation
+        # Only show important non-sensitive fields
+        important_fields = [
+            'n_manufacturers', 'n_periods', 'initial_demand',
+            'disruption_probability', 'disruption_magnitude',
+            'capacity_cost', 'unit_profit', 'holding_cost', 'stockout_penalty',
+            'fda_mode', 'enable_fda',
+            'llm_provider', 'llm_model', 'llm_temperature', 'max_retries'
+        ]
+        
+        parts = []
+        for key in important_fields:
+            if key in config_dict:
+                value = config_dict[key]
+                parts.append(f"{key}={value!r}")
+        
+        # Add summary of which API keys are configured (without showing values)
+        configured_keys = [field.replace('_api_key', '') for field in sensitive_fields 
+                          if field in config_dict and config_dict[field]]
+        if configured_keys:
+            parts.append(f"api_keys_configured={configured_keys}")
+        
+        return f"SimulationConfig({', '.join(parts)})"
     
     def __init__(self, config: SimulationConfig, log_dir: str = "experiments_logs"):
         self.config = config
@@ -128,18 +170,30 @@ class SimulationLogger:
     
     def log_simulation_start(self):
         """Log simulation initialization."""
+        # Sanitize config for storage (mask API keys)
+        config_dict = asdict(self.config)
+        sensitive_fields = ['openai_api_key', 'anthropic_api_key', 'gemini_api_key', 'deepseek_api_key']
+        for field in sensitive_fields:
+            if field in config_dict and config_dict[field]:
+                key_value = str(config_dict[field])
+                if len(key_value) > 10:
+                    config_dict[field] = f"{key_value[:8]}...{key_value[-4:]}"
+                else:
+                    config_dict[field] = "***"
+        
         event = LogEvent(
             timestamp=datetime.now().isoformat(),
             simulation_id=self.simulation_id,
             period=-1,
             event_type="simulation_start",
             event_data={
-                "config": asdict(self.config),
+                "config": config_dict,
                 "session_directory": str(self.session_dir)
             }
         )
         self._record_event(event)
-        self.main_logger.info(f"Simulation {self.simulation_id} started with config: {self.config}")
+        sanitized_config = self._sanitize_config_for_logging(self.config)
+        self.main_logger.info(f"Simulation {self.simulation_id} started with config: {sanitized_config}")
 
     def log_period_start(self, period: int):
         """Log the start of a new period."""

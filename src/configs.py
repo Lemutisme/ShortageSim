@@ -52,7 +52,7 @@ class SimulationConfig:
     max_retries: int = 3
 
     # API Configuration with safe loading
-    api_key: Optional[str] = None  # OpenAI default
+    openai_api_key: Optional[str] = None  # OpenAI default
     anthropic_api_key: Optional[str] = None
     gemini_api_key: Optional[str] = None
     deepseek_api_key: Optional[str] = None
@@ -61,8 +61,8 @@ class SimulationConfig:
     
     def __post_init__(self):
         """Load API keys if not provided."""
-        if self.api_key is None:
-            self.api_key = load_api_key_safely(
+        if self.openai_api_key is None:
+            self.openai_api_key = load_api_key_safely(
                 env_name="OPENAI_API_KEY",
                 file_candidates=[
                     "./keys/openai.txt",

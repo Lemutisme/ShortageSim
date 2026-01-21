@@ -226,7 +226,15 @@ async def run_gt_zero_shot_experiments(
     
     logger.info(f"Starting zero-shot experiments on {len(df)} scenarios")
     logger.info(f"Using model: {config.llm_model}")
-    logger.info(f"API key available: {config.api_key is not None}")
+    provider = config.llm_provider or "openai"
+    provider_key_map = {
+        'openai': config.openai_api_key,
+        'anthropic': config.anthropic_api_key,
+        'gemini': config.gemini_api_key,
+        'deepseek': config.deepseek_api_key,
+    }
+    api_key = provider_key_map.get(provider)
+    logger.info(f"API key available: {api_key is not None}")
     
     iterator = tqdm(df.itertuples(index=False), total=len(df)) if show_progress else df.itertuples(index=False)
     comparative_results = []

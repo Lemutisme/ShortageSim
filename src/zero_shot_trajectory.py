@@ -93,8 +93,8 @@ class ZeroShotTrajectoryPredictor:
         # Initialize clients based on provider
         if provider == 'openai':
             from openai import AsyncOpenAI
-            if config.api_key:
-                api_key = config.api_key
+            if config.openai_api_key:
+                api_key = config.openai_api_key
                 api_base = "https://api.openai.com/v1" 
                 self.logger.info("Configured AsyncOpenAI client (for gpt-4o)")
                 try:
@@ -331,7 +331,16 @@ Focus on economic fundamentals and realistic market dynamics. Explain how profit
         system_prompt, user_prompt = self._create_trajectory_prompt(scenario)
         
         try:
-            if not self.config.api_key:
+            # Check if API key is available for the configured provider
+            provider = getattr(self.config, 'llm_provider', 'openai').lower()
+            provider_key_map = {
+                'openai': getattr(self.config, 'openai_api_key', None),
+                'anthropic': getattr(self.config, 'anthropic_api_key', None),
+                'gemini': getattr(self.config, 'gemini_api_key', None),
+                'deepseek': getattr(self.config, 'deepseek_api_key', None),
+            }
+            api_key = provider_key_map.get(provider)
+            if not api_key:
                 # Return mock response for testing
                 return self._get_mock_trajectory(scenario)
             

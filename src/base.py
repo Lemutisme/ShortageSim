@@ -277,7 +277,7 @@ class BaseAgent(ABC, LoggerMixin):
 
         # Map provider to key attribute and presence
         provider_key_map = {
-            'openai': getattr(self.config, 'api_key', None),
+            'openai': getattr(self.config, 'openai_api_key', None),
             'anthropic': getattr(self.config, 'anthropic_api_key', None),
             'gemini': getattr(self.config, 'gemini_api_key', None),
             'deepseek': getattr(self.config, 'deepseek_api_key', None),
