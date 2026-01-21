@@ -11,14 +11,21 @@ from flask import Flask, render_template, request, jsonify, send_file
 from flask_socketio import SocketIO, emit, disconnect
 from flask_cors import CORS
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+# Add src directory to path so relative imports in src/ files work
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+src_dir = os.path.join(project_root, 'src')
+sys.path.insert(0, src_dir)
+sys.path.insert(0, project_root)
 
-from src.simulator import SimulationCoordinator
-from src.configs import SimulationConfig
-from src.prompts import PromptManager
+# Import simulation modules (linter may show warnings but these work at runtime)
+from simulator import SimulationCoordinator  # type: ignore
+from configs import SimulationConfig  # type: ignore
+from prompts import PromptManager  # type: ignore
 
 # Flask app setup
-app = Flask(__name__)
+app = Flask(__name__, 
+            template_folder=os.path.join(os.path.dirname(__file__), 'templates'),
+            static_folder=os.path.join(os.path.dirname(__file__), 'static'))
 app.config['SECRET_KEY'] = 'your-secret-key-here'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 CORS(app)
@@ -357,7 +364,7 @@ def create_config_from_web_data(config_data):
         llm_model=config_data.get('llm_model', 'gpt-4o'),
         llm_temperature=config_data.get('temperature', 0.3),
         max_retries=config_data.get('max_retries', 3),
-        api_key=config_data.get('api_key') or None,
+        openai_api_key=config_data.get('api_key') or config_data.get('openai_api_key') or None,
         n_disruptions_if_forced_disruption=config_data.get('n_disruptions_if_forced_disruption', 1)
     )
     
@@ -365,10 +372,6 @@ def create_config_from_web_data(config_data):
 
 # Development server
 if __name__ == '__main__':
-    # Create templates directory and save the HTML file
-    templates_dir = Path('templates')
-    templates_dir.mkdir(exist_ok=True)
-    
     print("Starting ShortageSim Web Server...")
     print("Access the interface at: http://localhost:5001")
     
