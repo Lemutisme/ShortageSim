@@ -134,16 +134,16 @@ Stage 2: Decision Maker
 ### Disruption Modeling
 
 * **Probability** : $\lambda = 0.05$ per manufacturer per period
-* **Magnitude** : $\delta = 20\%$ capacity reduction
-* **Duration** : $U\{n\}$ periods
+* **Magnitude** : $\delta = 20\\%$ capacity reduction
+* **Duration** : U{1, ...,n} periods
 * **Recovery** : Gradual capacity restoration
 
 ### Supply-Demand Allocation
 
-1. Initial allocation by market share: $D_t * market\_share$ per manufacturer
+1. Initial allocation by market share: $D_t * market\\_share$ per manufacturer
 2. Disrupted firms produce: $\min(capacity, allocation)$
 3. Unfilled demand redistributed to healthy firms
-4. Market shortage calculated as: $\max(0, D_t - total\_supply)$
+4. Market shortage calculated as: $\max(0, D_t - total\\_supply)$
 
 ### Agent Objectives
 
@@ -160,7 +160,7 @@ Stage 2: Decision Maker
 1. **Resolution-Lag Percentage (RLP)** : Measures how closely simulation resolves shortages compared to historical data. Positive values indicate simulation resolves later than ground truth, negative values indicate earlier resolution.
 
 $$
-RLP = 100\% × \frac{t_{sim} - t_{GT}}{t_{GT}}
+RLP = \frac{t_{sim} - t_{GT}}{t_{GT}} \times 100\\%
 $$
 
 where $t_{sim}$ is the simulation resolution time and $t_{GT}$ is the ground truth resolution time.
