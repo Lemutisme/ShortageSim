@@ -1,6 +1,6 @@
 import random
 import logging
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple, Any, Optional
 
 from buyer import BuyerAgent
 from fda import FDAAgent
@@ -15,18 +15,42 @@ from configs import SimulationConfig, DisruptionEvent
 class Environment:
     """Market environment managing supply-demand dynamics."""
     
-    def __init__(self, config: SimulationConfig):
+    def __init__(self, config: SimulationConfig, manufacturer_configs: Optional[List[SimulationConfig]] = None):
         self.config = config
         self.current_period = 0
         self.disruptions = []
         self.market_history = []
         
-        # Initialize manufacturers
-        self.manufacturers = [
-            ManufacturerAgent(i, config) 
-            for i in range(config.n_manufacturers)
-        ]
-        
+        # Initialize manufacturers (support asymmetric per-manufacturer configs)
+        # if manufacturer_configs is not None and len(manufacturer_configs) > 0:
+        #     # Synchronize global n_manufacturers with provided list length
+        #     if config.n_manufacturers != len(manufacturer_configs):
+        #         logging.getLogger("Environment").info(
+        #             f"Overriding n_manufacturers from {config.n_manufacturers} to {len(manufacturer_configs)} based on provided manufacturer_configs"
+        #         )
+        #         self.config.n_manufacturers = len(manufacturer_configs)
+
+        #     self.manufacturers = [
+        #         ManufacturerAgent(i, m_cfg)
+        #         for i, m_cfg in enumerate(manufacturer_configs)
+        #     ]
+        # else:
+        #     self.manufacturers = [
+        #         ManufacturerAgent(i, config) 
+        #         for i in range(config.n_manufacturers)
+        #     ]
+
+        if config.market_share is not None:
+            self.manufacturers = [
+                ManufacturerAgent(i, config, init_capacity=config.initial_demand * config.market_share[i])
+                for i in range(config.n_manufacturers)
+            ]
+        else:
+            self.manufacturers = [
+                ManufacturerAgent(i, config)
+                for i in range(config.n_manufacturers)
+            ]
+            
         # Initialize buyer and FDA
         self.buyer = BuyerAgent(config)
         self.fda = FDAAgent(config)
@@ -36,19 +60,6 @@ class Environment:
     def generate_disruptions(self, force_disruption: bool = False) -> List[DisruptionEvent]:
         """Generate random disruptions for the current period."""
         new_disruptions = []
-
-        # for manufacturer_id in range(self.config.n_manufacturers):
-        #     if random.random() < self.config.disruption_probability:
-        #         duration = random.randint(1, 4)
-        #         disruption = DisruptionEvent(
-        #             manufacturer_id=manufacturer_id,
-        #             start_period=self.current_period,
-        #             duration=duration,
-        #             magnitude=self.config.disruption_magnitude,
-        #             remaining_periods=duration
-        #         )
-        #         new_disruptions.append(disruption)
-        #         self.logger.info(f"New disruption: Manufacturer {manufacturer_id}, duration {duration}")
 
         if self.config.n_disruptions_if_forced_disruption > self.config.n_manufacturers:
             raise ValueError(f"Cannot create {self.config.n_disruptions_if_forced_disruption} unique disruptions with only {self.config.n_manufacturers} manufacturers.")
@@ -68,7 +79,20 @@ class Environment:
                 )
                 new_disruptions.append(disruption)
                 self.logger.info(f"Forced disruption: Manufacturer {disruption.manufacturer_id}, duration {duration}")
-            
+        else:
+            for manufacturer_id in range(self.config.n_manufacturers):
+                if random.random() < self.config.disruption_probability:
+                    duration = random.randint(1, 4)
+                    disruption = DisruptionEvent(
+                        manufacturer_id=manufacturer_id,
+                        start_period=self.current_period,
+                        duration=duration,
+                        magnitude=self.config.disruption_magnitude,
+                        remaining_periods=duration
+                    )
+                    new_disruptions.append(disruption)
+                    self.logger.info(f"New disruption: Manufacturer {manufacturer_id}, duration {duration}")
+       
         return new_disruptions
     
     def update_disruptions(self, force_disruption: bool = False):
@@ -111,31 +135,35 @@ class Environment:
         
         # Get current capacities
         capacities = [m.state.capacity for m in self.manufacturers]
+        market_share = [cap / sum(capacities) if sum(capacities) > 0 else 0 for cap in capacities] if sum(capacities) > 0 else [0]*n
         disrupted_ids = [m.manufacturer_id for m in self.manufacturers if m.state.disrupted]
         
         # Initial equal allocation
-        initial_allocation = demand / n
+        initial_allocation = [demand * share for share in market_share]
         productions = []
         
         # Calculate production for disrupted manufacturers
         unfilled_demand = 0
         for i, manufacturer in enumerate(self.manufacturers):
             if manufacturer.state.disrupted:
-                production = min(capacities[i], initial_allocation)
+                production = min(capacities[i], initial_allocation[i])
                 productions.append(production)
-                unfilled_demand += initial_allocation - production
+                unfilled_demand += initial_allocation[i] - production
             else:
                 productions.append(0)  # Placeholder, will be updated
         
         # Redistribute unfilled demand to undisrupted manufacturers
         undisrupted_count = n - len(disrupted_ids)
-        additional_allocation = unfilled_demand / undisrupted_count if undisrupted_count > 0 else 0
+        undisrupted_capacities = [m.state.capacity if not m.state.disrupted else 0 for m in self.manufacturers]
+        undisrupted_share = [cap / sum(undisrupted_capacities) for cap in undisrupted_capacities] if sum(undisrupted_capacities) > 0 else [0]*n
+        additional_allocation = [unfilled_demand * share for share in undisrupted_share]
         
         for i, manufacturer in enumerate(self.manufacturers):
             if not manufacturer.state.disrupted:
-                total_allocation = initial_allocation + additional_allocation
+                total_allocation = initial_allocation[i] + additional_allocation[i]
                 production = min(capacities[i], total_allocation)
                 productions[i] = production
+        print(f"Displayed Productions: {productions}")
         
         total_supply = sum(productions)
         shortage = max(0, demand - total_supply)

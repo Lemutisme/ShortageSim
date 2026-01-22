@@ -8,7 +8,7 @@ from configs import SimulationConfig, ManufacturerState
 class ManufacturerAgent(BaseAgent):
     """Pharmaceutical manufacturer agent with comprehensive logging."""
 
-    def __init__(self, manufacturer_id: int, config: SimulationConfig):
+    def __init__(self, manufacturer_id: int, config: SimulationConfig, init_capacity: float=None):
         super().__init__(f"manufacturer_{manufacturer_id}", config)
         self.manufacturer_id = manufacturer_id
         self.agent_type = "manufacturer"  # For prompt manager
@@ -16,7 +16,7 @@ class ManufacturerAgent(BaseAgent):
 
         self.state = ManufacturerState(
             id=manufacturer_id,
-            capacity=config.initial_demand / config.n_manufacturers
+            capacity=init_capacity if init_capacity else config.initial_demand / config.n_manufacturers
         )
 
     async def collect_and_analyze(self, context: Dict[str, Any]) -> Dict[str, Any]:
@@ -28,6 +28,7 @@ class ManufacturerAgent(BaseAgent):
         prompt_context = {
             "manufacturer_id": self.manufacturer_id,
             "n_manufacturers": self.config.n_manufacturers,
+            "market_share": round((self.state.capacity / (self.config.initial_demand)) * 100, 2),
             "period": context.get('period', 0),
             "n_periods": self.config.n_periods,
             "current_capacity": self.state.capacity,
@@ -76,6 +77,7 @@ class ManufacturerAgent(BaseAgent):
         decision_context = {
             "manufacturer_id": self.manufacturer_id,
             "current_capacity": self.state.capacity,
+            "market_share": round((self.state.capacity / (self.config.initial_demand)) * 100, 2),
             "can_expand": not self.state.disrupted,
             "capacity_cost": self.config.capacity_cost,
             "unit_profit": self.config.unit_profit,

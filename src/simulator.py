@@ -1,18 +1,18 @@
 import logging
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 from dataclasses import asdict
 import numpy as np
 
-from Environment import Environment
+from environment import Environment
 from configs import SimulationConfig, MarketState
 from logger import SimulationLogger
 
 class SimulationCoordinator:
     """Main simulation coordinator managing the multi-agent system with comprehensive logging."""
     
-    def __init__(self, config: SimulationConfig):
+    def __init__(self, config: SimulationConfig, manufacturer_configs: Optional[List[SimulationConfig]] = None):
         self.config = config
-        self.environment = Environment(config)
+        self.environment = Environment(config, manufacturer_configs=manufacturer_configs)
         self.results = []
         
         # Setup basic logging for coordinator FIRST
@@ -90,7 +90,10 @@ class SimulationCoordinator:
                 self.logger.debug("FDA making announcement decision")
                 
                 fda_context = self.environment.create_context("fda")
-                fda_decision = await self.environment.fda.make_decision(fda_context)
+                if self.config.enable_fda:
+                    fda_decision = await self.environment.fda.make_decision(fda_context)
+                else:
+                    fda_decision  = {"decision": {"announce_shortage": False}, "reasoning": "FDA disabled"}
 
                 fda_announcement = self.environment.fda.make_announcement(fda_decision)
                 

@@ -73,7 +73,7 @@ async def run_logged_simulation(config: SimulationConfig,
         print(f"❌ Simulation failed: {e}")
         raise
 
-async def run_comparative_study():
+async def run_comparative_study(model_override: str = None, provider_override: str = None):
     """Run multiple simulations to compare different scenarios."""
     
     print("🔬 Running Comparative Study with Different Market Conditions")
@@ -123,6 +123,12 @@ async def run_comparative_study():
         print(f"\n--- Running Scenario: {scenario['name']} ---")
         
         try:
+            # Apply overrides if provided
+            if model_override:
+                scenario['config'].llm_model = model_override
+            if provider_override:
+                scenario['config'].llm_provider = provider_override
+
             results = await run_logged_simulation(
                 scenario['config'], 
                 scenario['name']
@@ -277,19 +283,31 @@ def export_detailed_analysis(results: Dict[str, Any], export_dir: str = "analysi
 # Main Execution Functions
 # =============================================================================
 
-async def run_single_example(start_with_disruption: bool = False):
+async def run_single_example(start_with_disruption: bool = False, model_override: str = None, provider_override: str = None, **config_overrides):
     """Run a single example simulation with detailed logging."""
     
-    config = SimulationConfig(
-        n_manufacturers=2,
-        n_periods=4,
-        disruption_probability=0.05,
-        disruption_magnitude=0.3,
-        llm_temperature=0.3,
-        n_disruptions_if_forced_disruption=1
-        # Uncomment and set your API key:
-        # api_key=os.getenv("OPENAI_API_KEY")
-    )
+    default_params = {
+        "n_manufacturers": 2,
+        "n_periods": 4,
+        "disruption_probability": 0.05,
+        "disruption_magnitude": 0.3,
+        "llm_temperature": 0.3,
+        "n_disruptions_if_forced_disruption": 1,
+    }
+
+    # keys you want to exclude
+    exclude_keys = {'model', 'provider'}
+    # remove them before merging
+    filtered_overrides = {k: v for k, v in config_overrides.items() if k not in exclude_keys}
+    final_params = {**default_params, **filtered_overrides}
+
+    config = SimulationConfig(**final_params)
+
+    # Apply overrides
+    if model_override:
+        config.llm_model = model_override
+    if provider_override:
+        config.llm_provider = provider_override
 
     results = await run_logged_simulation(config, start_with_disruption, "Single Example Run")
 
@@ -305,14 +323,27 @@ async def run_gt_experiments(
         df: pd.DataFrame,
         show_progress: bool = True,
         export_dir: str = "gt_evaluation",
-        n_simulations: int = 1
+        n_simulations: int = 1,
+        model_override: str = None,
+        provider_override: str = None,
+        **config_overrides
 ):
+    if model_override:
+        export_dir += f"/model_{model_override}"
+    if config_overrides.get('llm_temperature') is not None:
+        export_dir += f"/temp_{config_overrides['llm_temperature']}"
+    if config_overrides.get('fda_mode') is not None:
+        export_dir += f"/fda_{config_overrides['fda_mode']}"
+    if config_overrides.get('enable_fda') == False:
+        export_dir += f"/no_fda"
     export_path = Path(export_dir)
     export_path.mkdir(exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    csv_path = export_path / f"gt_experiments_{ts}.csv"
+    csv_path = export_path  / f"gt_experiments_{ts}.csv"
+    config_path = export_path / f"gt_experiments_config_{ts}.txt"
     exists_header = False
 
+    save_config = False
     iterator = tqdm(df.itertuples(index=False), total=len(df)) if show_progress else df.itertuples(index=False)
     comparative_results = []
     comparison_df = pd.DataFrame()
@@ -323,15 +354,32 @@ async def run_gt_experiments(
             print(f"\n📊 Running Ground Truth Experiment: gt_id_{row_dict['gt_id']}_simulation_{sim}")
             print("=" * 80)
             try:
-                config = SimulationConfig(
-                    n_manufacturers=int(row_dict['n_manufacturers']),
-                    n_periods=int(row_dict['periods']),
-                    disruption_probability=0.05,
-                    disruption_magnitude=row_dict['disruption_magnitude'],
-                    llm_temperature=0.3,
-                    n_disruptions_if_forced_disruption=int(row_dict['disruption_number'])
-                )
-                
+                default_params = {
+                    "n_manufacturers": int(row_dict['n_manufacturers']),
+                    "n_periods": int(row_dict['periods']),
+                    "disruption_probability": 0.05,
+                    "disruption_magnitude": row_dict['disruption_magnitude'],
+                    "llm_temperature": 0.3,
+                    "n_disruptions_if_forced_disruption": int(row_dict['disruption_number'])
+                }
+                print("In ground truth experiment, n_manufacturers, n_periods, disruption_magnitude are set by the GT data and cannot be overridden.")
+                # Apply overrides
+                for key, value in config_overrides.items():
+                    if key in ["llm_temperature", "fda_mode", "enable_fda"]:
+                        default_params[key] = value
+                        print("overriding", key, value)
+                if model_override:
+                    default_params['llm_model'] = model_override
+                if provider_override:
+                    default_params['llm_provider'] = provider_override
+
+                config = SimulationConfig(**default_params)
+                if not save_config:
+                    with open(config_path, 'w') as f:
+                        f.write(str(config))
+                    print(f"\n💾 Configuration saved to: {config_path}")
+                    save_config = True
+
                 start_with_disruption = True if row_dict['disruption_number'] > 0 else False
 
                 results = await run_logged_simulation(config, start_with_disruption, "gt_id_" + str(row_dict['gt_id']))
@@ -382,79 +430,200 @@ async def run_gt_experiments(
     return comparison_df
 
 
-async def run_quick_policy_test():
+async def run_quick_policy_test(model_override: str = None, provider_override: str = None, **config_overrides):
     """Quick test of different policy scenarios."""
     
-    print("🎯 Quick Policy Effectiveness Test")
+    print("🎯 FDA Policy Effectiveness Test: Reactive vs. Proactive")
     
-    # This would require implementing proactive FDA mode
-    # For now, we test with different disruption scenarios
-    
-    low_disruption_config = SimulationConfig(
-        n_manufacturers=4,
-        n_periods=4,
-        disruption_probability=0.02,
-        disruption_magnitude=0.10
+   # --- 1. Define Common Test Parameters for High Disruption ---
+    common_params = {
+        "n_manufacturers": 4,
+        "n_periods": 10, # Good period length for policy comparison
+        "disruption_probability": 0.08,
+        "disruption_magnitude": 0.25,
+    }
+
+    final_params = {**common_params, **config_overrides}
+    if "fda_mode" in final_params:
+        del final_params["fda_mode"] # Remove to avoid conflict in SimulationConfig
+        print("⚠️ Warning: Since we are comparing policy interventions, 'fda_mode' in config_overrides will be ignored and set explicitly for each policy.")
+
+    # Apply overrides
+    if model_override:
+        final_params['llm_model'] = model_override
+    if provider_override:
+        final_params['llm_provider'] = provider_override
+
+    # --- 2. Create the two Policy Configurations (Distinct Instances) ---
+
+    # a) Reactive Policy Configuration
+    reactive_config = SimulationConfig(
+        **final_params,
+        fda_mode='reactive' # Explicitly set the mode
     )
     
-    high_disruption_config = SimulationConfig(
-        n_manufacturers=4,
-        n_periods=4,
-        disruption_probability=0.08,
-        disruption_magnitude=0.25
+    # b) Proactive Policy Configuration
+    proactive_config = SimulationConfig(
+        **final_params,
+        fda_mode='proactive' # Explicitly set the mode
     )
     
-    print("\n--- Low Disruption Environment ---")
-    low_results = await run_logged_simulation(low_disruption_config, "Low Disruption Policy Test")
+    # --- 3. Run Simulations and Collect Results ---
     
-    print("\n--- High Disruption Environment ---")
-    high_results = await run_logged_simulation(high_disruption_config, "High Disruption Policy Test")
+    print("\n--- Running REACTIVE Policy Test (High Disruption) ---")
+    reactive_results = await run_logged_simulation(
+        reactive_config, 
+        "Reactive FDA Policy Test"
+    )
     
-    # Compare outcomes
-    print(f"\n📊 Policy Test Comparison:")
-    print(f"Low Disruption - Peak Shortage: {low_results['summary_metrics']['peak_shortage_percentage']:.1%}")
-    print(f"High Disruption - Peak Shortage: {high_results['summary_metrics']['peak_shortage_percentage']:.1%}")
+    print("\n--- Running PROACTIVE Policy Test (High Disruption) ---")
+    proactive_results = await run_logged_simulation(
+        proactive_config, 
+        "Proactive FDA Policy Test"
+    )
     
-    print(f"Low Disruption - FDA Interventions: {len(low_results['fda_announcements'])}")
-    print(f"High Disruption - FDA Interventions: {len(high_results['fda_announcements'])}")
+    # --- 4. Compare Outcomes ---
+    
+    print(f"\n📊 Policy Test Comparison (Scenario: High Disruption):")
+    
+    # Reactive Metrics
+    reactive_peak = reactive_results['summary_metrics']['peak_shortage_percentage']
+    reactive_interventions = len(reactive_results['fda_announcements'])
+    
+    # Proactive Metrics
+    proactive_peak = proactive_results['summary_metrics']['peak_shortage_percentage']
+    proactive_interventions = len(proactive_results['fda_announcements'])
+    
+    # Output Table
+    print("\n| Policy | Peak Shortage | Total Interventions |")
+    print("|:---|:---|:---|")
+    print(f"| **Reactive** | {reactive_peak:.1%} | {reactive_interventions} |")
+    print(f"| **Proactive** | {proactive_peak:.1%} | {proactive_interventions} |")
+    
+    # Analysis
+    if proactive_peak < reactive_peak:
+        print("\n✅ **Conclusion:** The Proactive policy resulted in a lower peak shortage, indicating better performance in this scenario.")
+    else:
+        print("\n❌ **Conclusion:** The Reactive policy performed better or equally, suggesting the Proactive mode may be over-intervening or its prompts need tuning.")
 
 if __name__ == "__main__":
-    import sys
-    
+    import argparse
+    import asyncio
+    from pathlib import Path
+    import pandas as pd
+
     print("🧬 Drug Shortage Multi-Agent Simulation with Comprehensive Logging")
     print("=" * 70)
-    
-    if len(sys.argv) > 1:
-        mode = sys.argv[1].lower()
-        
-        if mode == "comparative":
-            print("Running comparative study...")
-            asyncio.run(run_comparative_study())
-        elif mode == "policy":
-            print("Running policy test...")
-            asyncio.run(run_quick_policy_test())
-        elif mode == "gt_experiment_dic":
-            print("Running ground truth experiment...")
-            HERE = Path(__file__).resolve().parent
-            csv_path = HERE/"../data"/"GT_Disc.csv"
-            # csv_path = HERE/"../data"/"GT_Disc_tester.csv"
-            df = pd.read_csv(csv_path)
-            print(df.shape)
-            asyncio.run(run_gt_experiments(df, n_simulations=1))
-        elif mode == "gt_experiment_nodic":
-            print("Running ground truth experiment (No discontinued)...")
-            HERE = Path(__file__).resolve().parent
-            csv_path = HERE/"../data"/"GT_NoDisc.csv"
-            df = pd.read_csv(csv_path)
-            print(df.shape)
-            asyncio.run(run_gt_experiments(df.iloc[6:]))
+
+    # --- New Argument Parsing Logic using argparse ---
+    parser = argparse.ArgumentParser(description="Run the Drug Shortage Multi-Agent Simulation.")
+
+    parser.add_argument(
+        "mode",
+        type=str,
+        nargs='?', # Makes the mode optional, defaults to None if not provided
+        default="single", # Default mode if none is specified
+        choices=["single", "comparative", "policy", "gt_experiment_disc", "gt_experiment_nondisc"],
+        help="The simulation mode to run."
+    )
+
+    def parse_list_of_floats(arg_value):
+        """
+        Splits a comma-separated string into a list of float numbers.
+        """
+        try:
+            # Split the string by comma, strip whitespace, and convert to float
+            items = [float(item.strip()) for item in arg_value.split(',') if item.strip()]
+            return items
+        except ValueError:
+            # Raise an error if any item can't be converted to a float
+            raise argparse.ArgumentTypeError(f"Invalid list value: '{arg_value}'. Items must be valid floating-point numbers.")
+
+    def str2bool(v):
+        """Converts a string representation of truth to True or False."""
+        if isinstance(v, bool):
+            return v
+        if v.lower() in ('yes', 'true', 't', 'y', '1'):
+            return True
+        elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+            return False
         else:
-            print("Unknown mode. Running single example...")
-            asyncio.run(run_single_example())
-    else:
-        print("Running single example simulation...")
-        asyncio.run(run_single_example(start_with_disruption=True))
+            # Raises an error if the input is not a recognized boolean string
+            raise argparse.ArgumentTypeError('Boolean value expected.')
+
+    # Keeping --model and --provider for legacy compatibility if needed, but llm_model is preferred
+    parser.add_argument("--model", type=str, help="Legacy: Specify a model name directly.")
+    parser.add_argument("--provider", type=str, help="Legacy: Specify a provider directly.")
+
+    parser.add_argument("--n_manufacturers", type=int, help="Number of manufacturers in the simulation.")
+    parser.add_argument("--n_periods", type=int, help="Number of periods in the simulation.")
+    parser.add_argument("--disruption_probability", type=float, help="Probability of disruption per manufacturer per period.")
     
+    parser.add_argument("--market_share", type=parse_list_of_floats, help="Comma-separated market share percentages for manufacturers (e.g., '0.5,0.3,0.2').")
+    parser.add_argument("--fda_mode", type=str, choices=["reactive", "proactive"], help="FDA policy mode to use in the simulation.")
+    parser.add_argument("--enable_fda", type=str2bool, help="Enable or disable the FDA agent (default: True).")
+
+    parser.add_argument("--llm_temperature", type=float, help="LLM sampling temperature for decision-making.")
+
+    args = parser.parse_args()
+
+    if args.market_share is not None:
+        if args.n_manufacturers is None:
+            print("\n❌ Error: The '--market_share' argument requires '--n_manufacturers' to be set.")
+            print("Please provide both arguments when customizing market share.")
+            exit(1)
+        elif len(args.market_share) != args.n_manufacturers:
+            print(f"\n❌ Error: The length of '--market_share' ({len(args.market_share)}) does not match '--n_manufacturers' ({args.n_manufacturers}).")
+            print("Please ensure the market share list matches the number of manufacturers.")
+            exit(1)
+        elif sum(args.market_share) == 0.0:
+            print(f"\n❌ Error: The sum of '--market_share' cannot be zero.")
+            print("Please provide valid market share percentages that sum to a positive value.")
+            exit(1)
+        else:
+            args.market_share = [share / sum(args.market_share) for share in args.market_share] # Normalize to sum to 1.0
+            print(f"\n✅ Normalized market share: {args.market_share}")
+
+    # Use the new llm_model argument, but allow legacy override
+    model_override = args.model #if args.model else args.llm_model
+    provider_override = args.provider
+
+    # Create a dictionary of SimulationConfig overrides
+    config_overrides = {
+        key: value for key, value in args.__dict__.items() if value is not None and key not in ['mode', 'model', 'provider']
+    }
+
+    # --- Main Simulation Logic ---
+    if args.mode == "comparative":
+        print(f"Running comparative study with model: {model_override}...")
+        asyncio.run(run_comparative_study(model_override, provider_override))
+        
+    elif args.mode == "policy":
+        print(f"Running policy test with model: {model_override}...")
+        asyncio.run(run_quick_policy_test(model_override, provider_override, **config_overrides))
+        
+    elif args.mode == "gt_experiment_disc":
+        print(f"Running ground truth experiment (Discontinued) with model: {model_override}...")
+        HERE = Path(__file__).resolve().parent
+        csv_path = HERE / "../data" / "GT_Disc.csv"
+        df = pd.read_csv(csv_path)
+        print(f"Loaded {df.shape[0]} trajectories from {csv_path.name}")
+        asyncio.run(run_gt_experiments(df, n_simulations=1, model_override=model_override, provider_override=provider_override, **config_overrides))
+        
+    elif args.mode == "gt_experiment_nondisc":
+        print(f"Running ground truth experiment (No Discontinued) with model: {model_override}...")
+        HERE = Path(__file__).resolve().parent
+        csv_path = HERE / "../data" / "GT_NoDisc.csv"
+        df = pd.read_csv(csv_path)
+        print(f"Loaded {df.shape[0]} trajectories from {csv_path.name}")
+        # Example of running a subset, adjust as needed
+        asyncio.run(run_gt_experiments(df, model_override=model_override, provider_override=provider_override, **config_overrides))
+        
+    else: # This handles the "single" mode (default)
+        print(f"Running single example simulation with model: {model_override}...")
+        asyncio.run(run_single_example(start_with_disruption=True, model_override=model_override, provider_override=provider_override, **config_overrides))
+
+    # --- Footer ---
     print("\n✅ Simulation completed! Check the generated log files for detailed analysis.")
     print("💡 Log files include:")
     print("   - Comprehensive event logs (JSONL format)")

@@ -7,23 +7,14 @@ import os
 # Configuration and Data Structures with Safe API Key Loading
 # =============================================================================
 
-def load_api_key_safely() -> str:
-    """Safely load API key from various sources."""
-    
-    # Try environment variable first
-    api_key = os.getenv("OPENAI_API_KEY")
+def load_api_key_safely(env_name: str, file_candidates: List[str], provider_label: str) -> Optional[str]:
+    """Safely load API key for a provider from env or files."""
+
+    api_key = os.getenv(env_name)
     if api_key and len(api_key.strip()) > 10:
         return api_key.strip()
-    
-    # Try reading from file
-    key_file_paths = [
-        "./keys/openai.txt",
-        "../keys/openai.txt", 
-        "keys/openai.txt",
-        "openai.txt"
-    ]
-    
-    for key_file in key_file_paths:
+
+    for key_file in file_candidates:
         try:
             if os.path.exists(key_file):
                 with open(key_file, 'r') as f:
@@ -31,13 +22,9 @@ def load_api_key_safely() -> str:
                 if api_key and len(api_key) > 10:
                     return api_key
         except Exception as e:
-            print(f"Warning: Could not read API key from {key_file}: {e}")
-    
-    # Return None if no key found - will use mock responses
-    print("Warning: No OpenAI API key found. Using mock responses for testing.")
-    print("To use real LLM calls:")
-    print("1. Set environment variable: export OPENAI_API_KEY='your-key-here'")
-    print("2. Or create file: ./keys/openai.txt with your API key")
+            print(f"Warning: Could not read {provider_label} API key from {key_file}: {e}")
+
+    print(f"Warning: No {provider_label} API key found. Using mock responses for testing.")
     return None
 
 @dataclass
@@ -53,22 +40,74 @@ class SimulationConfig:
     holding_cost: float = 0.1
     stockout_penalty: float = 1.1
     n_disruptions_if_forced_disruption: int = 1
+    fda_mode: str = "reactive"  # proactive or reactive
+    enable_fda: bool = True # Enable or disable FDA agent
+    market_share: List[float] = None  # If None, equal shared by default
 
     # LLM Configuration
+    llm_provider: str = "openai"  # one of: openai, anthropic, gemini, deepseek
     llm_model: str = "gpt-4o"
     # llm_model: str = "o3"
     llm_temperature: float = 0.3
     max_retries: int = 3
 
     # API Configuration with safe loading
-    api_key: Optional[str] = None
+    openai_api_key: Optional[str] = None  # OpenAI default
+    anthropic_api_key: Optional[str] = None
+    gemini_api_key: Optional[str] = None
+    deepseek_api_key: Optional[str] = None
     azure_endpoint: Optional[str] = None  # For Azure OpenAI
     api_version: str = "2024-02-15-preview"  # For Azure OpenAI
     
     def __post_init__(self):
-        """Load API key if not provided."""
-        if self.api_key is None:
-            self.api_key = load_api_key_safely()
+        """Load API keys if not provided."""
+        if self.openai_api_key is None:
+            self.openai_api_key = load_api_key_safely(
+                env_name="OPENAI_API_KEY",
+                file_candidates=[
+                    "./keys/openai.txt",
+                    "../keys/openai.txt",
+                    "keys/openai.txt",
+                    "openai.txt",
+                ],
+                provider_label="OpenAI",
+            )
+
+        if self.anthropic_api_key is None:
+            self.anthropic_api_key = load_api_key_safely(
+                env_name="ANTHROPIC_API_KEY",
+                file_candidates=[
+                    "./keys/anthropic.txt",
+                    "../keys/anthropic.txt",
+                    "keys/anthropic.txt",
+                    "anthropic.txt",
+                ],
+                provider_label="Anthropic",
+            )
+
+        if self.gemini_api_key is None:
+            self.gemini_api_key = load_api_key_safely(
+                env_name="GEMINI_API_KEY",
+                file_candidates=[
+                    "./keys/gemini.txt",
+                    "../keys/gemini.txt",
+                    "keys/gemini.txt",
+                    "gemini.txt",
+                ],
+                provider_label="Gemini",
+            )
+
+        if self.deepseek_api_key is None:
+            self.deepseek_api_key = load_api_key_safely(
+                env_name="DEEPSEEK_API_KEY",
+                file_candidates=[
+                    "./keys/deepseek.txt",
+                    "../keys/deepseek.txt",
+                    "keys/deepseek.txt",
+                    "deepseek.txt",
+                ],
+                provider_label="DeepSeek",
+            )
 
 @dataclass
 class DisruptionEvent:
@@ -78,7 +117,7 @@ class DisruptionEvent:
     duration: int
     magnitude: float
     remaining_periods: int = None
-    
+
     def __post_init__(self):
         if self.remaining_periods is None:
             self.remaining_periods = self.duration
@@ -93,7 +132,7 @@ class ManufacturerState:
     last_production: float = 0.0
     cumulative_profit: float = 0.0
     investment_history: List[float] = None
-    
+
     def __post_init__(self):
         if self.investment_history is None:
             self.investment_history = []
